@@ -18,7 +18,6 @@
 package org.opensearch.security.ssl;
 
 import java.io.File;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -37,7 +36,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -85,12 +83,10 @@ import io.netty.handler.ssl.ApplicationProtocolConfig.SelectedListenerFailureBeh
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectorFailureBehavior;
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
-import io.netty.util.internal.PlatformDependent;
 
 import static org.opensearch.security.ssl.SecureSSLSettings.SSLSetting.SECURITY_SSL_HTTP_KEYSTORE_KEYPASSWORD;
 import static org.opensearch.security.ssl.SecureSSLSettings.SSLSetting.SECURITY_SSL_HTTP_KEYSTORE_PASSWORD;
@@ -138,14 +134,10 @@ public class DefaultSecurityKeyStore implements SecurityKeyStore {
     private final boolean transportSSLEnforceCertReloadDnVerification;
 
     private ArrayList<String> enabledHttpCiphersJDKProvider;
-    private ArrayList<String> enabledHttpCiphersOpenSSLProvider;
     private ArrayList<String> enabledTransportCiphersJDKProvider;
-    private ArrayList<String> enabledTransportCiphersOpenSSLProvider;
 
     private ArrayList<String> enabledHttpProtocolsJDKProvider;
-    private ArrayList<String> enabledHttpProtocolsOpenSSLProvider;
     private ArrayList<String> enabledTransportProtocolsJDKProvider;
-    private ArrayList<String> enabledTransportProtocolsOpenSSLProvider;
 
     private SslContext httpSslContext;
     private SslContext transportServerSslContext;
@@ -180,45 +172,14 @@ public class DefaultSecurityKeyStore implements SecurityKeyStore {
             SSLConfigConstants.SECURITY_SSL_TRANSPORT_ENFORCE_CERT_RELOAD_DN_VERIFICATION,
             true
         );
-        final boolean useOpenSSLForHttpIfAvailable = OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED
-            && settings.getAsBoolean(SSLConfigConstants.SECURITY_SSL_HTTP_ENABLE_OPENSSL_IF_AVAILABLE, true);
-        final boolean useOpenSSLForTransportIfAvailable = OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED
-            && settings.getAsBoolean(SSLConfigConstants.SECURITY_SSL_TRANSPORT_ENABLE_OPENSSL_IF_AVAILABLE, true);
 
-        if (!OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED
-            && OpenSsl.isAvailable()
-            && (settings.getAsBoolean(SSLConfigConstants.SECURITY_SSL_HTTP_ENABLE_OPENSSL_IF_AVAILABLE, true)
-                || settings.getAsBoolean(SSLConfigConstants.SECURITY_SSL_TRANSPORT_ENABLE_OPENSSL_IF_AVAILABLE, true))) {
-            if (PlatformDependent.javaVersion() < 12) {
-                log.warn(
-                    "Support for OpenSSL with Java 11 or prior versions require using Netty allocator. Set 'opensearch.unsafe.use_netty_default_allocator' system property to true"
-                );
-            } else {
-                log.warn(
-                    "Support for OpenSSL with Java 12+ has been removed from Open Distro Security since Elasticsearch 7.4.0. Using JDK SSL instead."
-                );
-            }
-        }
-
-        boolean openSSLInfoLogged = false;
-
-        if (httpSSLEnabled && useOpenSSLForHttpIfAvailable) {
-            sslHTTPProvider = SslContext.defaultServerProvider();
-            logOpenSSLInfos();
-            openSSLInfoLogged = true;
-        } else if (httpSSLEnabled) {
+        if (httpSSLEnabled) {
             sslHTTPProvider = SslProvider.JDK;
         } else {
             sslHTTPProvider = null;
         }
 
-        if (transportSSLEnabled && useOpenSSLForTransportIfAvailable) {
-            sslTransportClientProvider = SslContext.defaultClientProvider();
-            sslTransportServerProvider = SslContext.defaultServerProvider();
-            if (!openSSLInfoLogged) {
-                logOpenSSLInfos();
-            }
-        } else if (transportSSLEnabled) {
+        if (transportSSLEnabled) {
             sslTransportClientProvider = sslTransportServerProvider = SslProvider.JDK;
         } else {
             sslTransportClientProvider = sslTransportServerProvider = null;
@@ -811,44 +772,17 @@ public class DefaultSecurityKeyStore implements SecurityKeyStore {
         this.httpCerts = certs;
     }
 
-    private void logOpenSSLInfos() {
-        if (OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED && OpenSsl.isAvailable()) {
-            log.info("OpenSSL {} ({}) available", OpenSsl.versionString(), OpenSsl.version());
-
-            if (OpenSsl.version() < 0x10002000L) {
-                log.warn(
-                    "Outdated OpenSSL version detected. You should update to 1.0.2k or later. Currently installed: {}",
-                    OpenSsl.versionString()
-                );
-            }
-
-            if (!OpenSsl.supportsHostnameValidation()) {
-                log.warn(
-                    "Your OpenSSL version {} does not support hostname verification. You should update to 1.0.2k or later.",
-                    OpenSsl.versionString()
-                );
-            }
-
-            log.debug("OpenSSL available ciphers {}", OpenSsl.availableOpenSslCipherSuites());
-        } else {
-            log.info(
-                "OpenSSL not available (this is not an error, we simply fallback to built-in JDK SSL) because of "
-                    + OpenSsl.unavailabilityCause()
-            );
-        }
-    }
-
     private List<String> getEnabledSSLCiphers(final SslProvider provider, boolean http) {
         if (provider == null) {
             return Collections.emptyList();
         }
 
+        assert provider == SslProvider.JDK;
+
         if (http) {
-            return ImmutableList.copyOf(provider == SslProvider.JDK ? enabledHttpCiphersJDKProvider : enabledHttpCiphersOpenSSLProvider);
+            return ImmutableList.copyOf(enabledHttpCiphersJDKProvider);
         } else {
-            return ImmutableList.copyOf(
-                provider == SslProvider.JDK ? enabledTransportCiphersJDKProvider : enabledTransportCiphersOpenSSLProvider
-            );
+            return ImmutableList.copyOf(enabledTransportCiphersJDKProvider);
         }
 
     }
@@ -858,14 +792,12 @@ public class DefaultSecurityKeyStore implements SecurityKeyStore {
             return new String[0];
         }
 
+        assert provider == SslProvider.JDK;
+
         if (http) {
-            return (provider == SslProvider.JDK ? enabledHttpProtocolsJDKProvider : enabledHttpProtocolsOpenSSLProvider).toArray(
-                new String[0]
-            );
+            return enabledHttpProtocolsJDKProvider.toArray(new String[0]);
         } else {
-            return (provider == SslProvider.JDK ? enabledTransportProtocolsJDKProvider : enabledTransportProtocolsOpenSSLProvider).toArray(
-                new String[0]
-            );
+            return enabledTransportProtocolsJDKProvider.toArray(new String[0]);
         }
 
     }
@@ -885,61 +817,6 @@ public class DefaultSecurityKeyStore implements SecurityKeyStore {
         final ImmutableSet<String> allowedSecureTransportSSLProtocols = ImmutableSet.copyOf(
             SSLConfigConstants.getSecureSSLProtocols(settings, false)
         );
-
-        if (OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED && OpenSsl.isAvailable()) {
-            final Set<String> openSSLSecureHttpCiphers = new HashSet<>();
-            for (final String secure : allowedSecureHttpSSLCiphers) {
-                if (OpenSsl.isCipherSuiteAvailable(secure)) {
-                    openSSLSecureHttpCiphers.add(secure);
-                }
-            }
-
-            log.debug(
-                "OPENSSL {} supports the following ciphers (java-style) {}",
-                OpenSsl.versionString(),
-                OpenSsl.availableJavaCipherSuites()
-            );
-            log.debug(
-                "OPENSSL {} supports the following ciphers (openssl-style) {}",
-                OpenSsl.versionString(),
-                OpenSsl.availableOpenSslCipherSuites()
-            );
-
-            enabledHttpCiphersOpenSSLProvider = new ArrayList<String>(openSSLSecureHttpCiphers);
-        } else {
-            enabledHttpCiphersOpenSSLProvider = new ArrayList<String>();
-        }
-
-        if (OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED && OpenSsl.isAvailable()) {
-            final Set<String> openSSLSecureTransportCiphers = new HashSet<>();
-            for (final String secure : allowedSecureTransportSSLCiphers) {
-                if (OpenSsl.isCipherSuiteAvailable(secure)) {
-                    openSSLSecureTransportCiphers.add(secure);
-                }
-            }
-
-            enabledTransportCiphersOpenSSLProvider = new ArrayList<String>(openSSLSecureTransportCiphers);
-        } else {
-            enabledTransportCiphersOpenSSLProvider = new ArrayList<String>();
-        }
-
-        if (OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED && OpenSsl.isAvailable() && OpenSsl.version() > 0x10101009L) {
-            enabledHttpProtocolsOpenSSLProvider = new ArrayList<>(Arrays.asList("TLSv1.3", "TLSv1.2", "TLSv1.1", "TLSv1"));
-            enabledHttpProtocolsOpenSSLProvider.retainAll(allowedSecureHttpSSLProtocols);
-            enabledTransportProtocolsOpenSSLProvider = new ArrayList<>(Arrays.asList("TLSv1.3", "TLSv1.2", "TLSv1.1"));
-            enabledTransportProtocolsOpenSSLProvider.retainAll(allowedSecureTransportSSLProtocols);
-
-            log.info("OpenSSL supports TLSv1.3");
-
-        } else if (OpenSearchSecuritySSLPlugin.OPENSSL_SUPPORTED && OpenSsl.isAvailable()) {
-            enabledHttpProtocolsOpenSSLProvider = new ArrayList<>(Arrays.asList("TLSv1.2", "TLSv1.1", "TLSv1"));
-            enabledHttpProtocolsOpenSSLProvider.retainAll(allowedSecureHttpSSLProtocols);
-            enabledTransportProtocolsOpenSSLProvider = new ArrayList<>(Arrays.asList("TLSv1.2", "TLSv1.1"));
-            enabledTransportProtocolsOpenSSLProvider.retainAll(allowedSecureTransportSSLProtocols);
-        } else {
-            enabledHttpProtocolsOpenSSLProvider = new ArrayList<>();
-            enabledTransportProtocolsOpenSSLProvider = new ArrayList<>();
-        }
 
         SSLEngine engine = null;
         List<String> jdkSupportedCiphers = null;
@@ -1239,10 +1116,9 @@ public class DefaultSecurityKeyStore implements SecurityKeyStore {
             final ASN1Sequence sequence = ASN1Sequence.getInstance(asn1Primitive);
             final ASN1ObjectIdentifier asn1ObjectIdentifier = ASN1ObjectIdentifier.getInstance(sequence.getObjectAt(0));
             final ASN1TaggedObject asn1TaggedObject = ASN1TaggedObject.getInstance(sequence.getObjectAt(1));
-            Method getObjectMethod = getObjectMethod();
-            ASN1Object maybeTaggedAsn1Primitive = (ASN1Primitive) getObjectMethod.invoke(asn1TaggedObject);
+            ASN1Object maybeTaggedAsn1Primitive = asn1TaggedObject.getObject();
             if (maybeTaggedAsn1Primitive instanceof ASN1TaggedObject) {
-                maybeTaggedAsn1Primitive = (ASN1Primitive) getObjectMethod.invoke(maybeTaggedAsn1Primitive);
+                maybeTaggedAsn1Primitive = ASN1TaggedObject.getInstance(maybeTaggedAsn1Primitive).getObject();
             }
             if (maybeTaggedAsn1Primitive instanceof ASN1String) {
                 return ImmutableList.of(asn1ObjectIdentifier.getId(), maybeTaggedAsn1Primitive.toString());
@@ -1252,15 +1128,6 @@ public class DefaultSecurityKeyStore implements SecurityKeyStore {
             }
         } catch (final Exception ioe) { // catch all exception here since BC throws diff exceptions
             throw new RuntimeException("Couldn't parse subject alternative names", ioe);
-        }
-    }
-
-    static Method getObjectMethod() throws ClassNotFoundException, NoSuchMethodException {
-        Class<?> asn1TaggedObjectClass = Class.forName("org.bouncycastle.asn1.ASN1TaggedObject");
-        try {
-            return asn1TaggedObjectClass.getMethod("getBaseObject");
-        } catch (NoSuchMethodException ex) {
-            return asn1TaggedObjectClass.getMethod("getObject");
         }
     }
 }

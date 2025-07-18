@@ -23,7 +23,9 @@ import javax.net.ssl.TrustManagerFactory;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.http.HttpServerTransport;
 import org.opensearch.http.netty4.ssl.SecureNetty4HttpServerTransport;
+import org.opensearch.plugins.SecureAuxTransportSettingsProvider;
 import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider.SecureHttpTransportParameters;
 import org.opensearch.plugins.SecureSettingsFactory;
 import org.opensearch.plugins.SecureTransportSettingsProvider;
 import org.opensearch.plugins.TransportExceptionHandler;
@@ -82,6 +84,63 @@ public class OpenSearchSecureSettingsFactory implements SecureSettingsFactory {
 
                     @Override
                     public Optional<String> sslProvider() {
+                        return sslSettingsManager.sslConfiguration(CertType.TRANSPORT)
+                            .map(config -> config.sslParameters().provider().name());
+                    }
+
+                    @Override
+                    public Optional<String> clientAuth() {
+                        return sslSettingsManager.sslConfiguration(CertType.TRANSPORT)
+                            .map(config -> config.sslParameters().clientAuth().name());
+                    }
+
+                    @Override
+                    public Collection<String> protocols() {
+                        return sslSettingsManager.sslConfiguration(CertType.TRANSPORT)
+                            .map(config -> config.sslParameters().allowedProtocols())
+                            .orElse(Collections.emptyList());
+                    }
+
+                    @Override
+                    public Collection<String> cipherSuites() {
+                        return sslSettingsManager.sslConfiguration(CertType.TRANSPORT)
+                            .map(config -> config.sslParameters().allowedCiphers())
+                            .orElse(Collections.emptyList());
+                    }
+
+                    @Override
+                    public Optional<KeyManagerFactory> keyManagerFactory() {
+                        return sslSettingsManager.sslConfiguration(CertType.TRANSPORT).map(SslConfiguration::keyStoreFactory);
+                    }
+
+                    @Override
+                    public Optional<TrustManagerFactory> trustManagerFactory() {
+                        return sslSettingsManager.sslConfiguration(CertType.TRANSPORT).map(SslConfiguration::trustStoreFactory);
+                    }
+
+                });
+            }
+
+            @Override
+            public Optional<SSLEngine> buildSecureServerTransportEngine(Settings settings, Transport transport) throws SSLException {
+                return sslSettingsManager.sslContextHandler(CertType.TRANSPORT).map(SslContextHandler::createSSLEngine);
+            }
+
+            @Override
+            public Optional<SSLEngine> buildSecureClientTransportEngine(Settings settings, String hostname, int port) throws SSLException {
+                return sslSettingsManager.sslContextHandler(CertType.TRANSPORT_CLIENT).map(c -> c.createSSLEngine(hostname, port));
+            }
+        });
+    }
+
+    @Override
+    public Optional<SecureHttpTransportSettingsProvider> getSecureHttpTransportSettingsProvider(Settings settings) {
+        return Optional.of(new SecureHttpTransportSettingsProvider() {
+            @Override
+            public Optional<SecureHttpTransportParameters> parameters(Settings settings) {
+                return Optional.of(new SecureHttpTransportParameters() {
+                    @Override
+                    public Optional<String> sslProvider() {
                         return sslSettingsManager.sslConfiguration(CertType.HTTP).map(config -> config.sslParameters().provider().name());
                     }
 
@@ -117,21 +176,6 @@ public class OpenSearchSecureSettingsFactory implements SecureSettingsFactory {
                 });
             }
 
-            @Override
-            public Optional<SSLEngine> buildSecureServerTransportEngine(Settings settings, Transport transport) throws SSLException {
-                return sslSettingsManager.sslContextHandler(CertType.TRANSPORT).map(SslContextHandler::createSSLEngine);
-            }
-
-            @Override
-            public Optional<SSLEngine> buildSecureClientTransportEngine(Settings settings, String hostname, int port) throws SSLException {
-                return sslSettingsManager.sslContextHandler(CertType.TRANSPORT_CLIENT).map(c -> c.createSSLEngine(hostname, port));
-            }
-        });
-    }
-
-    @Override
-    public Optional<SecureHttpTransportSettingsProvider> getSecureHttpTransportSettingsProvider(Settings settings) {
-        return Optional.of(new SecureHttpTransportSettingsProvider() {
             @Override
             public Collection<TransportAdapterProvider<HttpServerTransport>> getHttpTransportAdapterProviders(Settings settings) {
                 return List.of(new TransportAdapterProvider<HttpServerTransport>() {
@@ -184,5 +228,10 @@ public class OpenSearchSecureSettingsFactory implements SecureSettingsFactory {
                 return sslSettingsManager.sslContextHandler(CertType.HTTP).map(SslContextHandler::createSSLEngine);
             }
         });
+    }
+
+    @Override
+    public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
+        return Optional.empty();
     }
 }

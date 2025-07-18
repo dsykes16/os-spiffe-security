@@ -51,13 +51,16 @@ import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.security.privileges.ActionPrivileges;
 import org.opensearch.security.privileges.PrivilegesConfigurationValidationException;
 import org.opensearch.security.privileges.PrivilegesEvaluationContext;
 import org.opensearch.security.privileges.PrivilegesEvaluationException;
+import org.opensearch.security.privileges.actionlevel.RoleBasedActionPrivileges;
 import org.opensearch.security.resolver.IndexResolverReplacer;
 import org.opensearch.security.securityconf.impl.SecurityDynamicConfiguration;
 import org.opensearch.security.securityconf.impl.v7.RoleV7;
 import org.opensearch.security.user.User;
+import org.opensearch.security.util.MockPrivilegeEvaluationContextBuilder;
 import org.opensearch.test.framework.TestSecurityConfig;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -526,7 +529,8 @@ public class DocumentPrivilegesTest {
                 null,
                 null,
                 null,
-                () -> CLUSTER_STATE
+                () -> CLUSTER_STATE,
+                ActionPrivileges.EMPTY
             );
             this.statefulness = statefulness;
             this.dfmEmptyOverridesAll = dfmEmptyOverridesAll == DfmEmptyOverridesAll.DFM_EMPTY_OVERRIDES_ALL_TRUE;
@@ -537,7 +541,13 @@ public class DocumentPrivilegesTest {
                 roleConfig,
                 statefulness == Statefulness.STATEFUL ? INDEX_METADATA.getIndicesLookup() : Map.of(),
                 xContentRegistry,
-                Settings.builder().put("plugins.security.dfm_empty_overrides_all", this.dfmEmptyOverridesAll).build()
+                Settings.builder()
+                    .put("plugins.security.dfm_empty_overrides_all", this.dfmEmptyOverridesAll)
+                    .put(
+                        RoleBasedActionPrivileges.PRECOMPUTED_PRIVILEGES_ENABLED.getKey(),
+                        statefulness == Statefulness.STATEFUL || statefulness == Statefulness.NON_STATEFUL
+                    )
+                    .build()
             );
         }
     }
@@ -841,7 +851,8 @@ public class DocumentPrivilegesTest {
                 null,
                 RESOLVER_REPLACER,
                 INDEX_NAME_EXPRESSION_RESOLVER,
-                () -> CLUSTER_STATE
+                () -> CLUSTER_STATE,
+                ActionPrivileges.EMPTY
             );
             this.statefulness = statefulness;
             this.dfmEmptyOverridesAll = dfmEmptyOverridesAll == DfmEmptyOverridesAll.DFM_EMPTY_OVERRIDES_ALL_TRUE;
@@ -852,7 +863,13 @@ public class DocumentPrivilegesTest {
                 roleConfig,
                 statefulness == Statefulness.STATEFUL ? INDEX_METADATA.getIndicesLookup() : Map.of(),
                 xContentRegistry,
-                Settings.builder().put("plugins.security.dfm_empty_overrides_all", this.dfmEmptyOverridesAll).build()
+                Settings.builder()
+                    .put("plugins.security.dfm_empty_overrides_all", this.dfmEmptyOverridesAll)
+                    .put(
+                        RoleBasedActionPrivileges.PRECOMPUTED_PRIVILEGES_ENABLED.getKey(),
+                        statefulness == Statefulness.STATEFUL || statefulness == Statefulness.NON_STATEFUL
+                    )
+                    .build()
             );
         }
     }
@@ -1104,7 +1121,13 @@ public class DocumentPrivilegesTest {
                 roleConfig,
                 statefulness == Statefulness.STATEFUL ? INDEX_METADATA.getIndicesLookup() : Map.of(),
                 xContentRegistry,
-                Settings.builder().put("plugins.security.dfm_empty_overrides_all", this.dfmEmptyOverridesAll).build()
+                Settings.builder()
+                    .put("plugins.security.dfm_empty_overrides_all", this.dfmEmptyOverridesAll)
+                    .put(
+                        RoleBasedActionPrivileges.PRECOMPUTED_PRIVILEGES_ENABLED.getKey(),
+                        statefulness == Statefulness.STATEFUL || statefulness == Statefulness.NON_STATEFUL
+                    )
+                    .build()
             );
         }
 
@@ -1126,7 +1149,8 @@ public class DocumentPrivilegesTest {
                 null,
                 null,
                 null,
-                () -> CLUSTER_STATE
+                () -> CLUSTER_STATE,
+                ActionPrivileges.EMPTY
             );
             this.statefulness = statefulness;
             this.dfmEmptyOverridesAll = dfmEmptyOverridesAll == DfmEmptyOverridesAll.DFM_EMPTY_OVERRIDES_ALL_TRUE;
@@ -1146,7 +1170,7 @@ public class DocumentPrivilegesTest {
         @Test(expected = PrivilegesEvaluationException.class)
         public void invalidTemplatedQuery() throws Exception {
             DocumentPrivileges.DlsQuery.create("{\"invalid\": \"totally ${attr.foo}\"}", xContentRegistry)
-                .evaluate(new PrivilegesEvaluationContext(new User("test_user"), ImmutableSet.of(), null, null, null, null, null, null));
+                .evaluate(MockPrivilegeEvaluationContextBuilder.ctx().get());
         }
 
         @Test
@@ -1191,9 +1215,7 @@ public class DocumentPrivilegesTest {
         }
 
         User buildUser() {
-            User user = new User("test_user_" + description);
-            user.addAttributes(this.attributes);
-            return user;
+            return new User("test_user_" + description).withAttributes(this.attributes);
         }
 
         @Override
@@ -1233,7 +1255,8 @@ public class DocumentPrivilegesTest {
      */
     static enum Statefulness {
         STATEFUL,
-        NON_STATEFUL
+        NON_STATEFUL,
+        DISABLED
     }
 
     /**

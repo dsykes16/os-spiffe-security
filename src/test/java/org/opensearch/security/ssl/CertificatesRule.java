@@ -45,7 +45,7 @@ import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
@@ -53,7 +53,7 @@ import org.opensearch.common.collect.Tuple;
 
 public class CertificatesRule extends ExternalResource {
 
-    private final static BouncyCastleProvider BOUNCY_CASTLE_PROVIDER = new BouncyCastleProvider();
+    private final static BouncyCastleFipsProvider BOUNCY_CASTLE_FIPS_PROVIDER = new BouncyCastleFipsProvider();
 
     private final TemporaryFolder temporaryFolder = new TemporaryFolder();
 
@@ -128,7 +128,7 @@ public class CertificatesRule extends ExternalResource {
     }
 
     public KeyPair generateKeyPair() throws NoSuchAlgorithmException {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA", BOUNCY_CASTLE_PROVIDER);
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA", BOUNCY_CASTLE_FIPS_PROVIDER);
         generator.initialize(4096);
         return generator.generateKeyPair();
     }
@@ -146,13 +146,32 @@ public class CertificatesRule extends ExternalResource {
 
     public X509CertificateHolder generateCaCertificate(
         final KeyPair parentKeyPair,
+        final String subjectName,
+        final Instant startDate,
+        final Instant endDate
+    ) throws IOException, NoSuchAlgorithmException, OperatorCreationException {
+        return generateCaCertificate(parentKeyPair, subjectName, generateSerialNumber(), startDate, endDate);
+    }
+
+    public X509CertificateHolder generateCaCertificate(
+        final KeyPair parentKeyPair,
+        final BigInteger serialNumber,
+        final Instant startDate,
+        final Instant endDate
+    ) throws IOException, NoSuchAlgorithmException, OperatorCreationException {
+        return generateCaCertificate(parentKeyPair, DEFAULT_SUBJECT_NAME, serialNumber, startDate, endDate);
+    }
+
+    public X509CertificateHolder generateCaCertificate(
+        final KeyPair parentKeyPair,
+        final String subjectName,
         final BigInteger serialNumber,
         final Instant startDate,
         final Instant endDate
     ) throws IOException, NoSuchAlgorithmException, OperatorCreationException {
         // CS-SUPPRESS-SINGLE: RegexpSingleline Extension should only be used sparingly to keep implementations as generic as possible
         return createCertificateBuilder(
-            DEFAULT_SUBJECT_NAME,
+            subjectName,
             DEFAULT_SUBJECT_NAME,
             parentKeyPair.getPublic(),
             parentKeyPair.getPublic(),
@@ -161,7 +180,7 @@ public class CertificatesRule extends ExternalResource {
             endDate
         ).addExtension(Extension.basicConstraints, true, new BasicConstraints(true))
             .addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign))
-            .build(new JcaContentSignerBuilder("SHA256withRSA").setProvider(BOUNCY_CASTLE_PROVIDER).build(parentKeyPair.getPrivate()));
+            .build(new JcaContentSignerBuilder("SHA256withRSA").setProvider(BOUNCY_CASTLE_FIPS_PROVIDER).build(parentKeyPair.getPrivate()));
         // CS-ENFORCE-SINGLE
     }
 
@@ -284,7 +303,7 @@ public class CertificatesRule extends ExternalResource {
             )
             .addExtension(Extension.extendedKeyUsage, true, new ExtendedKeyUsage(KeyPurposeId.id_kp_clientAuth))
             .addExtension(Extension.subjectAlternativeName, false, new DERSequence(sans.toArray(sans.toArray(new ASN1Encodable[0]))))
-            .build(new JcaContentSignerBuilder("SHA256withRSA").setProvider(BOUNCY_CASTLE_PROVIDER).build(parentKeyPair.getPrivate()));
+            .build(new JcaContentSignerBuilder("SHA256withRSA").setProvider(BOUNCY_CASTLE_FIPS_PROVIDER).build(parentKeyPair.getPrivate()));
         // CS-ENFORCE-SINGLE
         return Tuple.tuple(keyPair.getPrivate(), certificate);
     }

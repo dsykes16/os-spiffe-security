@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jdk: [21]
+        jdk: [21, 24]
         test-run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     steps:
@@ -22,7 +22,7 @@ jobs:
 
     - uses: actions/checkout@v4
 
-    - run: OPENDISTRO_SECURITY_TEST_OPENSSL_OPT=true ./gradlew test
+    - run: ./gradlew test
 
     - uses: actions/upload-artifact@v4
       if: always()

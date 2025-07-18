@@ -237,11 +237,13 @@ public class RestApiComplianceAuditlogTest extends AbstractAuditlogUnitTest {
         Assert.assertFalse(AuditMessage.HASH_REGEX_PATTERN.matcher(message2.toString()).matches());
 
         // create internal user and verify no BCrypt hash is present in audit logs
-        final AuditMessage message3 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+        final List<AuditMessage> messages3 = TestAuditlogImpl.doThenWaitForMessages(() -> {
             rh.executePutRequest("/_opendistro/_security/api/internalusers/test", "{ \"password\":\"some new user password\"}");
-        });
+        }, 2);
 
-        Assert.assertFalse(AuditMessage.HASH_REGEX_PATTERN.matcher(message3.toString()).matches());
+        for (AuditMessage msg : messages3) {
+            Assert.assertFalse(AuditMessage.HASH_REGEX_PATTERN.matcher(msg.toString()).matches());
+        }
     }
 
     @Test
@@ -287,79 +289,117 @@ public class RestApiComplianceAuditlogTest extends AbstractAuditlogUnitTest {
         Assert.assertTrue(message2.toString().contains("__HASH__"));
 
         // create internal user and verify no PBKDF2 hash is present in audit logs
-        final AuditMessage message3 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+        final List<AuditMessage> messages3 = TestAuditlogImpl.doThenWaitForMessages(() -> {
             rh.executePutRequest("/_opendistro/_security/api/internalusers/test", "{ \"password\":\"some new user password\"}");
-        });
+        }, 2);
 
-        Assert.assertFalse(
-            message3.toString()
-                .contains(
-                    "$3$1331439861760512$wBFrJJIAokWuJxlO6BQPLashXgznvR4tRmXk3aEy9SpHWrb9kFjPPLByZZzMLBNQFjhepgbngYh7RfMh8TrPLw==$vqGlzGsxqGf9TgfxhORjdoqRFB3npvBd9B0GAtBMg9mD2zBbSTohRYlOxUL7UQLma66zZdD67c4RNE9BKelabw=="
-                )
-        );
-        Assert.assertTrue(message3.toString().contains("__HASH__"));
+        for (AuditMessage msg : messages3) {
+            Assert.assertFalse(
+                msg.toString()
+                    .contains(
+                        "$3$1331439861760512$wBFrJJIAokWuJxlO6BQPLashXgznvR4tRmXk3aEy9SpHWrb9kFjPPLByZZzMLBNQFjhepgbngYh7RfMh8TrPLw==$vqGlzGsxqGf9TgfxhORjdoqRFB3npvBd9B0GAtBMg9mD2zBbSTohRYlOxUL7UQLma66zZdD67c4RNE9BKelabw=="
+                    )
+            );
+
+            Assert.assertTrue(msg.toString().contains("__HASH__"));
+        }
 
         // test with various users and different PBKDF2 hash formats to make sure they all get redacted
-        final AuditMessage message4 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+        final List<AuditMessage> messages4 = TestAuditlogImpl.doThenWaitForMessages(() -> {
             rh.executeGetRequest("/_opendistro/_security/api/internalusers", encodeBasicHeader("user1", "user1"));
-        });
+        }, 1);
 
-        Assert.assertFalse(
-            message4.toString()
-                .contains(
-                    "$1$4294967296128$VmnDMbQ4wLiFUq178RKvj+EYfdb3Q26qCiDcJDoCxpYnKpyuG0JhTC2wpUkMUveV5RmBFzldKQkdqZEfE0XAgg==$9u3aMWc6VP2oGkXei7UaXA=="
-                )
-        );
-        Assert.assertTrue(message4.toString().contains("__HASH__"));
+        for (AuditMessage msg : messages4) {
+            Assert.assertFalse(
+                msg.toString()
+                    .contains(
+                        "$1$4294967296128$VmnDMbQ4wLiFUq178RKvj+EYfdb3Q26qCiDcJDoCxpYnKpyuG0JhTC2wpUkMUveV5RmBFzldKQkdqZEfE0XAgg==$9u3aMWc6VP2oGkXei7UaXA=="
+                    )
+            );
+            Assert.assertTrue(msg.toString().contains("__HASH__"));
+        }
 
-        final AuditMessage message5 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+        final List<AuditMessage> messages5 = TestAuditlogImpl.doThenWaitForMessages(() -> {
             rh.executeGetRequest("/_opendistro/_security/api/internalusers", encodeBasicHeader("user2", "user2"));
-        });
+        }, 1);
 
-        Assert.assertFalse(
-            message5.toString()
-                .contains(
-                    "$2$214748364800224$eQgqv2RI6yo95yeVnM5sfwUCwxHo6re0w+wpx6ZqZtHQV+dzlyP6YFitjNG2mlaTkg0pR56xArQaAgapdVcBQQ==$tGHWhoc83cd5nZ7QIZKPORjW/N5jklhYhRgXpw=="
-                )
-        );
-        Assert.assertTrue(message5.toString().contains("__HASH__"));
+        for (AuditMessage msg : messages5) {
+            Assert.assertFalse(
+                msg.toString()
+                    .contains(
+                        "$2$214748364800224$eQgqv2RI6yo95yeVnM5sfwUCwxHo6re0w+wpx6ZqZtHQV+dzlyP6YFitjNG2mlaTkg0pR56xArQaAgapdVcBQQ==$tGHWhoc83cd5nZ7QIZKPORjW/N5jklhYhRgXpw=="
+                    )
+            );
+            Assert.assertTrue(msg.toString().contains("__HASH__"));
+        }
 
-        final AuditMessage message6 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+        final List<AuditMessage> messages6 = TestAuditlogImpl.doThenWaitForMessages(() -> {
             rh.executeGetRequest("/_opendistro/_security/api/internalusers", encodeBasicHeader("user3", "user3"));
-        });
+        }, 1);
 
-        Assert.assertFalse(
-            message6.toString()
-                .contains(
-                    "$3$322122547200256$5b3wEAsMc05EZFxfncCUfZRERgvbwlBhYXd5vVR14kNJtmhXSpYMzydRZxO9096IPTkc47doH4hIdKX6LTguLg==$oQQvAtUyOC6cwdAYi5WeIM7rGUN9l3IdJ9y2RNxZCWo="
-                )
-        );
-        Assert.assertTrue(message6.toString().contains("__HASH__"));
+        for (AuditMessage msg : messages6) {
+            Assert.assertFalse(
+                msg.toString()
+                    .contains(
+                        "$3$322122547200256$5b3wEAsMc05EZFxfncCUfZRERgvbwlBhYXd5vVR14kNJtmhXSpYMzydRZxO9096IPTkc47doH4hIdKX6LTguLg==$oQQvAtUyOC6cwdAYi5WeIM7rGUN9l3IdJ9y2RNxZCWo="
+                    )
+            );
+            Assert.assertTrue(msg.toString().contains("__HASH__"));
+        }
 
-        final AuditMessage message7 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+        final List<AuditMessage> messages7 = TestAuditlogImpl.doThenWaitForMessages(() -> {
             rh.executeGetRequest("/_opendistro/_security/api/internalusers", encodeBasicHeader("user4", "user4"));
-        });
+        }, 1);
 
-        Assert.assertFalse(
-            message7.toString()
-                .contains(
-                    "$4$429496729600384$+SNSgbZD67a1bd92iuEiHCq5pvvrCx3HrNIf5hbGIJdxgXegpWilpB6vUGvYigegAUzZqE9iIsL4pSJztUNJYw==$lTxZ7tax6dBQ0r4qPJpc8d7YuoTBiUujY9HJeAZvARXMjIgvnJwa6FeYugttOKc0"
-                )
-        );
-        Assert.assertTrue(message7.toString().contains("__HASH__"));
+        for (AuditMessage msg : messages7) {
+            Assert.assertFalse(
+                msg.toString()
+                    .contains(
+                        "$4$429496729600384$+SNSgbZD67a1bd92iuEiHCq5pvvrCx3HrNIf5hbGIJdxgXegpWilpB6vUGvYigegAUzZqE9iIsL4pSJztUNJYw==$lTxZ7tax6dBQ0r4qPJpc8d7YuoTBiUujY9HJeAZvARXMjIgvnJwa6FeYugttOKc0"
+                    )
+            );
+            Assert.assertTrue(msg.toString().contains("__HASH__"));
+        }
 
-        final AuditMessage message8 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+        final List<AuditMessage> messages8 = TestAuditlogImpl.doThenWaitForMessages(() -> {
             rh.executeGetRequest("/_opendistro/_security/api/internalusers", encodeBasicHeader("user5", "user5"));
+        }, 1);
+
+        for (AuditMessage msg : messages8) {
+            Assert.assertFalse(
+                msg.toString()
+                    .contains(
+                        "$5$644245094400512$HQe/MOv/NAlgodNhqTmjqj5jGxBwG5xuRaxKwn7r4nlUba1kj/CYnpdFaXGvVeRxt2NLm8fbekS6NYonv358Ew==$1sDx+0tMbtGzU6jlQg/Dyt30Yxuy5RdNmP9B1EzMTxYWi8k1xg2gXLy7w1XbetEC8UD/lpyXJPlaoxXpsaADyA=="
+                    )
+            );
+            Assert.assertTrue(msg.toString().contains("__HASH__"));
+        }
+
+    }
+
+    @Test
+    public void testArgon2HashRedaction() {
+        final Settings settings = Settings.builder()
+            .put("plugins.security.audit.type", TestAuditlogImpl.class.getName())
+            .put(ConfigConstants.SECURITY_RESTAPI_ROLES_ENABLED, "opendistro_security_all_access")
+            .put(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_ENABLE_REST, false)
+            .put(ConfigConstants.OPENDISTRO_SECURITY_AUDIT_ENABLE_TRANSPORT, false)
+            .put(ConfigConstants.SECURITY_COMPLIANCE_HISTORY_INTERNAL_CONFIG_ENABLED, true)
+            .put(ConfigConstants.OPENDISTRO_SECURITY_COMPLIANCE_HISTORY_WRITE_LOG_DIFFS, true)
+            .put(ConfigConstants.SECURITY_PASSWORD_HASHING_ALGORITHM, ConfigConstants.ARGON2)
+            .build();
+        final DynamicSecurityConfig securityConfig = new DynamicSecurityConfig().setSecurityInternalUsers("internal_users_argon2.yml");
+        setupAndReturnAuditMessages(settings, securityConfig);
+        rh.sendAdminCertificate = true;
+        rh.keystore = "kirk-keystore.jks";
+
+        // read internal users and verify no Argon2 hash is present in audit logs
+        final AuditMessage message1 = TestAuditlogImpl.doThenWaitForMessage(() -> {
+            rh.executeGetRequest("/_opendistro/_security/api/internalusers");
         });
 
-        Assert.assertFalse(
-            message8.toString()
-                .contains(
-                    "$5$644245094400512$HQe/MOv/NAlgodNhqTmjqj5jGxBwG5xuRaxKwn7r4nlUba1kj/CYnpdFaXGvVeRxt2NLm8fbekS6NYonv358Ew==$1sDx+0tMbtGzU6jlQg/Dyt30Yxuy5RdNmP9B1EzMTxYWi8k1xg2gXLy7w1XbetEC8UD/lpyXJPlaoxXpsaADyA=="
-                )
-        );
-        Assert.assertTrue(message8.toString().contains("__HASH__"));
-
+        Assert.assertFalse(message1.toString().contains("$argon2id$"));
+        Assert.assertTrue(message1.toString().contains("__HASH__"));
     }
 
     private List<AuditMessage> setupAndReturnAuditMessages(Settings settings) {
